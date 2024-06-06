@@ -1,3 +1,5 @@
+const secp256k1 = require("ethereum-cryptography/secp256k1");
+const keccak256 = require("ethereum-cryptography/keccak");
 const express = require("express");
 const app = express();
 const cors = require("cors");
@@ -7,9 +9,23 @@ app.use(cors());
 app.use(express.json());
 
 const balances = {
-  "0xdb580e1e45f369909f6024f536b3f8d4d920df3f": 100,
-  "0x48d5736f02e26de01208b4bb0396d6dd2005ebb5": 50,
-  "0x192e4bd53af37fb7599eab5cb082e0aa5a888655": 75,
+  "0xc20c6895dad85981cc7b7cee2a4b8ae45b1b39af": 100,
+  "0x037edb2c19846371fdee51c37b7e9b7d9aa49acc": 50,
+  "0x414bf3fd365600154fcb9dc8c75b821634346f11": 75,
+
+  /*
+  private key:  1f73caa7e88e8bf80290c4908a16d751bca12590dc6ee3f452746375c629bee5
+public key:  020112548e1f42b691a8669655ba686464f0c7137f5db260d9df5791b2051d4f53
+eth address:  0xc20c6895dad85981cc7b7cee2a4b8ae45b1b39af
+
+private key:  b7c4234baa14a97b4d61794fe5eaa12b081af61cc2e09b1bcf53d772728397cd
+public key:  025ec5c7bedfbe4259b65eb632c76ca6a76fd00006cccbe2a6c0f8c2e0f14f58c5
+eth address:  0x037edb2c19846371fdee51c37b7e9b7d9aa49acc
+
+private key:  1afca244358da34195912edc22a3def8be6d5e9f6df1ee0ac62bdfc5c88af797
+public key:  027abc0a85a2e22f1aa758006ca2f9b738d140e896709b7c8e9bade306ef81ebbd
+eth address:  0x414bf3fd365600154fcb9dc8c75b821634346f11
+*/
 };
 
 app.get("/balance/:address", (req, res) => {
@@ -19,7 +35,22 @@ app.get("/balance/:address", (req, res) => {
 });
 
 app.post("/send", (req, res) => {
-  const { sender, recipient, amount } = req.body;
+  const { sender, recipient, amount, signature } = req.body;
+  const msg = { amount, recipient };
+  const msgHash = keccak256(Buffer.from(JSON.stringify(msg)));
+
+  let signatureBuffer;
+  try {
+    signatureBuffer = Buffer.from(signature, "hex");
+  } catch (error) {
+    res.status(400).send({ message: "Invalid signature format!" });
+    return;
+  }
+
+  if (!secp256k1.verify(msgHash, signatureBuffer, sender)) {
+    res.status(400).send({ message: "Invalid signature!" });
+    return;
+  }
 
   setInitialBalance(sender);
   setInitialBalance(recipient);

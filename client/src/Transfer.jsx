@@ -1,51 +1,61 @@
 import { useState } from "react";
 import server from "./server";
-import * as secp from "ethereum-cryptography/secp256k1";
 import { secp256k1 } from "ethereum-cryptography/secp256k1";
-import { toHex, utf8ToBytes } from "ethereum-cryptography/utils";
 import { keccak256 } from "ethereum-cryptography/keccak";
 
 function Transfer({ address, setBalance, privateKey }) {
+  // State variables for the amount to send and the recipient's address
   const [sendAmount, setSendAmount] = useState("");
   const [recipient, setRecipient] = useState("");
 
+  // Helper function to set state variables from input events
   const setValue = (setter) => (evt) => setter(evt.target.value);
 
-  // Function to hash a message using keccak256 algorithm
-  function hashMessage(message) {
-    return keccak256(Uint8Array.from(message));
-  }
+  // Function to hash a message using keccak256
+  const hashMessage = (message) => keccak256(Uint8Array.from(message));
+  // Function to sign a message using the private key
+  const signMessage = (msg) => secp256k1.sign(hashMessage(msg), privateKey);
 
-  function signMessage(msg) {
-    return secp256k1.sign(hashMessage(msg), privateKey);
-  }
-
-  // Function to handle the transfer of funds
+  // Function to handle form submission
   async function transfer(evt) {
     evt.preventDefault();
 
+    // Create the message object
     const msg = { amount: parseInt(sendAmount), recipient };
-    const signature = signMessage(JSON.stringify(msg));
+    // Sign the message
+    const sig = signMessage(msg);
+
+    // Function to stringify BigInts in the signature
+    const stringifyBigInts = (obj) => {
+      const str = JSON.stringify(obj, (_, v) =>
+        typeof v === "bigint" ? v.toString() : v
+      );
+      return JSON.parse(str);
+    };
+
+    // Stringify the signature
+    const sigStringified = stringifyBigInts(sig);
+
+    // Create the transaction object
+    const tx = {
+      sig: sigStringified,
+      msg,
+      sender: address,
+    };
 
     try {
-      // Send a POST request to the server to initiate the transfer
+      // Send the transaction to the server and update the balance
       const {
         data: { balance },
-      } = await server.post(`send`, {
-        sender: address,
-        amount: parseInt(sendAmount),
-        recipient,
-        signature: signature.signature,
-      });
-
-      // Update the balance after the transfer is successful
+      } = await server.post(`send`, tx);
       setBalance(balance);
     } catch (ex) {
-      // Display an alert if there's an error during the transfer
+      // Alert any error messages
       alert(ex.response.data.message);
     }
   }
 
+  // Render the form
   return (
     <form className="container transfer" onSubmit={transfer}>
       <h1>Send Transaction</h1>
